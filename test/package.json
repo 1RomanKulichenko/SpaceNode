@@ -1,0 +1,16 @@
+{
+  "name": "test",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "app.test.js",
+  "scripts": {
+    "test": "node --test app.test.js"
+  },
+  "keywords": ["SpaceNode", "test", "example", "spacenode"],
+  "author": "Roman Kulichenko",
+  "license": "ISC",
+  "description": "This is a test of SpaceNode's functionality. It is not meant to be run as a standalone test suite, but rather to be imported and run by the main test suite in the root of the repository.",
+  "dependencies": {
+    "spacenode": "^1.0.2"
+  }
+}
