@@ -1,0 +1,21 @@
+{
+  "name": "ws",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "This example shows a minimal WebSocket endpoint using `app.ws()`.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "SpaceNode",
+    "WebSocket",
+    "example",
+    "spacenode"
+  ],
+  "author": "Roman Kulichenko",
+  "license": "ISC",
+  "dependencies": {
+    "spacenode": "^1.0.2"
+  }
+}

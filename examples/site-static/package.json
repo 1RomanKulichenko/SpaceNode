@@ -1,0 +1,16 @@
+{
+  "name": "site-static",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "This example serves the repository's `/public` folder as a static website using SpaceNode's static file server.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["SpaceNode", "static", "example", "spacenode"],
+  "author": "Roman Kulichenko",
+  "license": "ISC",
+  "dependencies": {
+    "spacenode": "^1.0.2"
+  }
+}
