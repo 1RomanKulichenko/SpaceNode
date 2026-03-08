@@ -1,6 +1,6 @@
 # ⚡ SpaceNode
 
-v1.0.2
+v1.0.3
 
 **Official Site**
 https://spacenode.org/
@@ -123,11 +123,103 @@ Drop a folder in `modules/` → framework discovers it automatically.
 Convention: `module.js` + `*.controller.js` + `*.service.js` + `*.dto.js`.
 
 ### Pipeline Middleware (No `next()`)
-```js
-// Guards are pure functions — return, throw, or merge state
-['GET', '/admin', 'dashboard', ['auth', 'role:admin', 'rateLimit:100']]
+
+Pipes are pure functions that run **before** the route handler. No callback chains, no `next()`. Each pipe either continues (returns nothing), enriches the request (returns an object), or aborts (throws `HttpError`).
+
+**How it works:**
+
 ```
-No callback hell. No `next()`. Each pipe returns or throws.
+Request → [pipe1] → [pipe2] → [pipe3] → Handler → Response
+                                            ↑
+                     Each pipe can:
+                     • return nothing       → continue to next pipe
+                     • return { user }      → merge into request (request.user = ...)
+                     • return { after: fn } → post-handler hook (runs after response)
+                     • throw HttpError      → abort pipeline, send error
+```
+
+Pipes receive two arguments — `(request, services)` — same as handlers.
+
+**Three levels of pipes** (executed in order):
+
+1. **Global pipes** — apply to ALL routes:
+```js
+const app = await createApp({
+  pipe: ['cors', 'logger', 'compress'],
+})
+```
+
+2. **Module-level pipes** — apply to all routes in a module:
+```js
+// modules/admin/module.js
+export default {
+  prefix: '/admin',
+  pipe: ['auth', 'role:admin'],  // every route in this module requires admin
+  routes: [
+    ['GET', '/stats', 'stats'],
+    ['GET', '/users', 'users'],
+  ],
+}
+```
+
+3. **Route-level pipes** — apply to a single route:
+```js
+routes: [
+  ['POST', '/login', 'login', ['dto:loginDto']],              // only DTO validation
+  ['GET',  '/me',    'me',    ['auth']],                       // only auth
+  ['PUT',  '/user',  'update', ['auth', 'dto:updateUserDto']], // auth + validation
+]
+```
+
+Execution order: **global → module → route → handler**.
+
+#### Creating Custom Pipes
+
+**Inline pipe** (directly in module config):
+```js
+export default {
+  prefix: '/api',
+  pipe: [
+    // Add request timing
+    (request) => {
+      request.startTime = Date.now()
+      return {
+        after: (statusCode) => {
+          console.log(`${request.method} ${request.path} → ${statusCode} (${Date.now() - request.startTime}ms)`)
+        }
+      }
+    }
+  ],
+  routes: [...],
+}
+```
+
+**Named pipe** (reusable via `defineGuard` or `app.addGuard` — see Guards below):
+```js
+import { defineGuard } from 'spacenode'
+import { HttpError } from 'spacenode'
+
+defineGuard('apiKey', () => (request) => {
+  const key = request.headers['x-api-key']
+  if (key !== 'secret-key') throw new HttpError(401, 'Invalid API key')
+})
+
+// Now use it by name:
+routes: [
+  ['GET', '/data', 'getData', ['apiKey']]
+]
+```
+
+**Pipe with data merging:**
+```js
+// This pipe adds `request.lang` for all subsequent pipes and the handler
+defineGuard('locale', () => (request) => {
+  const lang = request.headers['accept-language']?.slice(0, 2) || 'en'
+  return { lang }  // → request.lang = 'en'
+})
+```
+
+> **Protected keys:** Pipes cannot overwrite built-in request properties (`method`, `path`, `body`, `send`, `headers`, etc.). Attempting to do so logs a warning and skips the key. Store custom data in unique keys or `request.state`.
 
 ### DI Container
 Services from ALL modules are collected and injected as the second handler argument:
@@ -219,6 +311,10 @@ Auto-generates OpenAPI 3.0.3 spec from your modules: routes, path parameters, DT
 
 ### Built-in Guards
 
+Guards are **named pipes** — registered by name and referenced as strings in route/module config. A guard is a **factory function** that receives an optional parameter and returns a pipe function.
+
+Format: `'guardName'` or `'guardName:param'` — the part after `:` is passed to the factory.
+
 | Guard | Usage | Description |
 |-------|-------|-------------|
 | `auth` | `['auth']` | Bearer token → calls your `defineAuth()` verifier |
@@ -231,17 +327,84 @@ Auto-generates OpenAPI 3.0.3 spec from your modules: routes, path parameters, DT
 | `security` | `['security']` | Security headers (XSS, HSTS, X-Frame, etc.) |
 | `security:strict` | `['security:strict']` | + CSP, Permissions-Policy, COOP, CORP |
 
-Custom guards:
+#### Creating Custom Guards
+
+**Global guard** — available everywhere:
 ```js
 import { defineGuard } from 'spacenode'
+import { HttpError } from 'spacenode'
 
-defineGuard('isAdmin', async (request, services) => {
-  if (request.user.role !== 'admin') request.error(403, 'Forbidden')
+// Simple guard (no parameter):
+defineGuard('premium', () => (request) => {
+  if (!request.user?.isPremium) {
+    throw new HttpError(403, 'Premium subscription required')
+  }
+})
+
+// Usage: ['auth', 'premium']
+```
+
+**Guard with parameter** — the string after `:` is passed as `param`:
+```js
+// 'minAge:18' → param = '18'
+defineGuard('minAge', (param) => (request) => {
+  const minAge = Number(param)
+  if (!request.user?.age || request.user.age < minAge) {
+    throw new HttpError(403, `Minimum age: ${minAge}`)
+  }
+})
+
+// Usage: ['auth', 'minAge:21']
+```
+
+**Guard with after-hook** — run logic after the handler:
+```js
+defineGuard('timing', () => (request) => {
+  const start = Date.now()
+  return {
+    after: (statusCode) => {
+      console.log(`${request.method} ${request.path} → ${statusCode} (${Date.now() - start}ms)`)
+    }
+  }
+})
+
+// Usage: ['timing']
+```
+
+**Guard that enriches the request:**
+```js
+defineGuard('loadCompany', () => async (request, services) => {
+  const company = await services.companyService.findById(request.params.companyId)
+  if (!company) throw new HttpError(404, 'Company not found')
+  return { company }  // → request.company available in handler
+})
+
+// Usage: ['auth', 'loadCompany']
+// In handler: ({ company, send }) => send(company)
+```
+
+**Per-app guard** — overrides global, scoped to one app instance:
+```js
+const app = await createApp()
+
+app.addGuard('rateLimit', (param) => (request) => {
+  // Custom rate limit logic (e.g. Redis-backed)
 })
 ```
 
+#### Guard Resolution Order
+
+1. **Built-in** guards (`auth`, `role`, `cors`, etc.)
+2. **App-level** guards (`app.addGuard()`) — override built-in
+3. **Global** guards (`defineGuard()`) — fallback
+
+If a pipe name is not found in any registry → throws `Error("Pipe not found")`.
+
 ### Built-in DTO Validation
 
+Two equivalent formats — pick what fits your style:
+
+**Array format** (concise):
 ```js
 export const userDto = {
   email: ['string', 'required', 'email'],
@@ -254,6 +417,22 @@ export const userDto = {
   },
 }
 ```
+
+**Object format** (explicit):
+```js
+export const userDto = {
+  email:    { type: 'string', required: true, email: true },
+  name:     { type: 'string', required: true, min: 2, max: 50 },
+  age:      { type: 'number', min: 18, max: 99 },
+  role:     { type: 'string', enum: 'user,admin,seller' },
+  bio:      { type: 'string', optional: true, max: 500 },
+  metadata: {
+    provider: { type: 'string', default: 'github' },
+  },
+}
+```
+
+Both formats produce identical validation results and can be mixed within a single schema.
 
 Built-in rules: `string`, `number`, `boolean`, `array`, `object`, `email`, `url`, `uuid`, `date`, `required`, `optional`, `min`, `max`, `length`, `pattern`, `enum`, `default`.
 

@@ -1,6 +1,6 @@
 {
   "name": "spacenode",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Node.js microservice framework. Auto-discovery modules, pipeline middleware, DI container (singleton/transient/scoped), event bus, guards, WebSocket. Zero dependencies.",
   "type": "module",
   "main": "lib/index.js",
