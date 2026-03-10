@@ -5,12 +5,14 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ViewEngine } from '../lib/views.js'
 
 // ── Test helpers ──
 
-const TEST_DIR = join(import.meta.dirname, '_test_views')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const TEST_DIR = join(__dirname, '_test_views')
 
 function setupViews(files = {}) {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true })
