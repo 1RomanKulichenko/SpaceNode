@@ -11,6 +11,6 @@
   "author": "Roman Kulichenko",
   "license": "ISC",
   "dependencies": {
-    "spacenode": "^1.0.2"
+    "spacenode": "^1.1.0"
   }
 }

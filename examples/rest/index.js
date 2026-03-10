@@ -1,4 +1,4 @@
-import { createApp } from 'spacenode'
+import { createApp } from '../../src/index.js'
 
 // Minimal REST example using imperative routes
 const app = await createApp({ static: false })

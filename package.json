@@ -1,7 +1,7 @@
 {
   "name": "spacenode",
-  "version": "1.0.3",
-  "description": "Node.js microservice framework. Auto-discovery modules, pipeline middleware, DI container (singleton/transient/scoped), event bus, guards, WebSocket. Zero dependencies.",
+  "version": "1.1.0",
+  "description": "SpaceNode - Node.js microservice framework. Auto-discovery modules, SSR, REST API, static-site, pipeline middleware, DI container (singleton/transient/scoped), event bus, guards, WebSocket, dto and zero dependencies - all in one box.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -17,8 +17,14 @@
     "access": "public"
   },
   "keywords": [
+    "spacenode",
     "framework",
     "microservices",
+    "REST API",
+    "SSR",
+    "WebSocket",
+    "templates",
+    "guards",
     "http",
     "server",
     "rest",

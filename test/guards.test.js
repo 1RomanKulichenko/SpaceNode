@@ -285,6 +285,80 @@ describe('Guards', () => {
       assert.ok(guards.includes('logger'))
       assert.ok(guards.includes('compress'))
       assert.ok(guards.includes('security'))
+      assert.ok(guards.includes('csrf'))
+    })
+  })
+
+  describe('csrfGuard', () => {
+    it('should generate token and set cookie on GET', () => {
+      const guard = resolveGuard('csrf')
+      const cookiesCalled = []
+      const req = makeRequest({
+        method: 'GET',
+        cookie(name, value, opts) {
+          cookiesCalled.push({ name, value, opts })
+          return this
+        },
+      })
+      const result = guard(req)
+
+      // Should set csrfToken and csrfField on request
+      assert.ok(req.csrfToken)
+      assert.strictEqual(req.csrfToken.length, 64) // 32 bytes hex
+      assert.ok(req.csrfField.includes('name="_csrf"'))
+      assert.ok(req.csrfField.includes(req.csrfToken))
+      // Should return csrfToken for pipeline merging
+      assert.strictEqual(result.csrfToken, req.csrfToken)
+      // Should set cookie
+      assert.strictEqual(cookiesCalled[0].name, '_csrf')
+    })
+
+    it('should pass when tokens match on POST', () => {
+      const guard = resolveGuard('csrf')
+      const token = 'a'.repeat(64)
+      const req = makeRequest({
+        method: 'POST',
+        cookies: { _csrf: token },
+        body: { _csrf: token },
+        cookie() { return this },
+      })
+      // Should not throw
+      assert.doesNotThrow(() => guard(req))
+    })
+
+    it('should throw 403 when no token on POST', () => {
+      const guard = resolveGuard('csrf')
+      const req = makeRequest({
+        method: 'POST',
+        cookies: {},
+        body: {},
+        cookie() { return this },
+      })
+      assert.throws(() => guard(req), (err) => err.status === 403)
+    })
+
+    it('should throw 403 when tokens mismatch', () => {
+      const guard = resolveGuard('csrf')
+      const req = makeRequest({
+        method: 'POST',
+        cookies: { _csrf: 'a'.repeat(64) },
+        body: { _csrf: 'b'.repeat(64) },
+        cookie() { return this },
+      })
+      assert.throws(() => guard(req), (err) => err.status === 403)
+    })
+
+    it('should accept token from x-csrf-token header', () => {
+      const guard = resolveGuard('csrf')
+      const token = 'c'.repeat(64)
+      const req = makeRequest({
+        method: 'POST',
+        cookies: { _csrf: token },
+        headers: { 'x-csrf-token': token },
+        body: {},
+        cookie() { return this },
+      })
+      assert.doesNotThrow(() => guard(req))
     })
   })
 })

@@ -1,14 +1,18 @@
 # ⚡ SpaceNode
 
-v1.0.3
+v1.1.0
 
 **Official Site**
 https://spacenode.org/
 
-**Revolutionary Node.js microservice framework.**
-Auto-discovery modules, pipeline middleware, DI container, event bus, WebSocket — zero dependencies.
+**Docs**
+https://spacenode.org/docs/introduction.html
 
-> 2× faster than Express. Faster than Fastify. Faster than raw Node.js.
+**Revolutionary Node.js microservice framework.**
+REST APIs, SSR sites, static file serving — one framework, zero dependencies.
+Auto-discovery modules, pipeline middleware, DI container, event bus, DTO validation, WebSocket, OpenAPI, built-in SSR template engine with layouts, partials & pipe filters.
+
+> 2× faster than Express. On par with Fastify. Only 163 KB.
 
 ## Install
 
@@ -29,7 +33,7 @@ my-api/
       auth.dto.js
 ```
 
-**app.js** — 2 lines to run a full microservice:
+**app.js** — 3 lines to run a full microservice:
 
 ```js
 import { createApp } from 'spacenode'
@@ -69,12 +73,21 @@ export async function me(request, services) {
 }
 ```
 
-**modules/auth/auth.dto.js** — built-in validation:
+**modules/auth/auth.dto.js** — built-in validation (array format):
 
 ```js
 export const loginDto = {
   email: ['string', 'required', 'email'],
   password: ['string', 'required', 'min:6'],
+}
+```
+
+Or use the **object format** — same result, explicit syntax:
+
+```js
+export const loginDto = {
+  email:    { type: 'string', required: true, email: true },
+  password: { type: 'string', required: true, min: 6 },
 }
 ```
 
@@ -287,6 +300,152 @@ const app = await createApp({ watch: true })
 ```
 
 File watcher auto-restarts the server on changes. Uses parent/child process architecture with 150ms debounce. Ignores `node_modules/` and `.git/`.
+
+### Views / SSR
+
+Built-in template engine for server-side rendering — no dependencies:
+
+```js
+import { createApp } from 'spacenode'
+
+const app = await createApp({
+  baseUrl: import.meta.url,
+  views: './views',
+  static: './public',
+})
+app.listen(3000)
+```
+
+```
+my-site/
+  app.js
+  public/
+    css/
+      main.css
+  views/
+    settings.js
+    layout.html
+    pages/
+      home.html
+      login.html
+    partials/
+      nav.html
+      footer.html
+```
+
+**views/settings.js** — auto-loaded config:
+
+```js
+export default {
+  layout: 'layout',             // default layout template
+  globals: {                     // variables available in ALL templates
+    siteName: 'My Site',
+    year: new Date().getFullYear(),
+  },
+}
+```
+
+**Template syntax:**
+
+```html
+<!-- Expressions (auto-escaped) -->
+[= title]
+[= user.name]
+
+<!-- Raw output (unescaped — for trusted HTML) -->
+[= raw(body)]
+
+<!-- Pipe filters -->
+[= user.name | upper]
+[= user.name | capitalize]
+[= description | truncate:200]
+[= createdAt | date:'DD.MM.YYYY']
+[= price | currency:'EUR']
+[= data | json]
+
+<!-- Conditionals -->
+[# if user]
+  <p>Welcome, [= user.name]!</p>
+[# else]
+  <p>Please log in</p>
+[/if]
+
+<!-- Loops -->
+[# each users as u]
+  <tr><td>[= u.name]</td><td>[= u.email]</td></tr>
+[/each]
+
+<!-- Includes (partials) -->
+[> partials/nav]
+[> partials/card { title: 'Hello' }]
+
+<!-- Blocks (inject content into layout slots) -->
+[# block head]<link rel="stylesheet" href="/css/admin.css">[/block]
+```
+
+**Layout** (`views/layout.html`) — wraps every page:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>[= title] — [= siteName]</title>
+  <link rel="stylesheet" href="/css/main.css">
+  [= raw(head)]
+</head>
+<body>
+  [> partials/nav]
+  <main>[= raw(body)]</main>
+  [> partials/footer]
+</body>
+</html>
+```
+
+**Render from controller** via `request.render()`:
+
+```js
+export async function profilePage(request) {
+  await request.render('pages/profile', {
+    title: 'Profile',
+    user: request.user,
+  })
+}
+```
+
+**Declarative routes** via `app.render()` — no controller needed:
+
+```js
+// Static data:
+app.render('GET', '/', 'pages/home', { title: 'Home' })
+
+// Async data with services:
+app.render('GET', '/users', 'pages/users', async (req, services) => ({
+  users: await services.userService.all()
+}))
+
+// With guard pipes:
+app.render('GET', '/dashboard', 'pages/dashboard', ['auth'], async (req, s) => ({
+  stats: await s.statsService.get()
+}))
+```
+
+**Override layout per-render:**
+
+```js
+request.render('pages/home', data, { layout: 'admin' })  // different layout
+request.render('pages/home', data, { layout: false })     // no layout
+```
+
+**Custom helpers:**
+
+```js
+app.addHelper('slug', (v) => String(v).toLowerCase().replace(/\s+/g, '-'))
+// → [= title | slug]
+```
+
+Built-in pipes: `upper`, `lower`, `capitalize`, `truncate`, `date`, `json`, `pad`, `plural`, `currency`.
+
+Features: AOT compilation, LRU template cache, auto-escaping, layouts, partials, blocks, pipe filters, flash messages, CSRF support, path traversal protection.
 
 ### OpenAPI
 
@@ -570,6 +729,9 @@ app.listen(3000)
 | `pipe` | `[]` | Global pipes for all routes |
 | `static` | `false` | Static files directory (e.g. `'./public'`) |
 | `spa` | `false` | SPA mode — fallback to index.html |
+| `views` | `false` | Views directory for SSR templates (e.g. `'./views'`) |
+| `baseUrl` | `null` | Base URL for path resolution (`import.meta.url`) |
+| `layout` | `null` | Default layout template (or set in `views/settings.js`) |
 | `watch` | `false` | Hot reload on file changes |
 | `openapi` | `false` | OpenAPI spec generation (`true` or `{ title, version }`) |
 | `wsOrigins` | `null` | Allowed WebSocket origins |
@@ -593,6 +755,8 @@ app.listen(3000)
   redirect(url, 302),
   html(content, 200),
   cookie(name, value, opts),
+  render(view, data, opts),  // SSR — render template
+  flash(type, message),      // flash message for next request
 }
 ```
 
@@ -618,17 +782,6 @@ import {
   ScopedContainer,    // scoped DI container
 } from 'spacenode'
 ```
-
-## Benchmarks
-
-50 connections, 3 rounds × 30s averaged, Node.js v22:
-
-| Framework | Avg RPS | Avg Latency | vs Raw HTTP |
-|-----------|---------|-------------|-------------|
-| Raw Node.js | 7,974 | 6.26ms | baseline |
-| **SpaceNode** | **9,796** | **5.17ms** | **+22.8%** |
-| Fastify 5 | 7,494 | 6.68ms | -6.0% |
-| Express 5 | 3,971 | 12.57ms | -50.2% |
 
 ## License
 

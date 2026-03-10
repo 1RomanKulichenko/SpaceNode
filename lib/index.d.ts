@@ -58,7 +58,23 @@ export interface RequestContext<TBody = any> {
 	setHeader(key: string, value: string | number): RequestContext<TBody>
 	redirect(url: string, status?: number): void
 	html(content: string, status?: number): void
+	render(template: string, data?: Record<string, any>, options?: RenderOptions): Promise<void>
 	cookie(name: string, value: string, options?: CookieOptions): RequestContext<TBody>
+
+	/**
+	 * Flash messages — survive exactly one redirect.
+	 *   request.flash('success', 'Logged in!')
+	 *   // On next request: request.flashes → { success: ['Logged in!'] }
+	 */
+	flash(type: string, message: string): RequestContext<TBody>
+
+	/** Incoming flash messages from previous request (auto-cleared after read). */
+	readonly flashes: Record<string, string[]>
+
+	/** CSRF token (set by csrf guard on safe methods). */
+	csrfToken?: string
+	/** Hidden input HTML for CSRF token (set by csrf guard). */
+	csrfField?: string
 }
 
 // ═══════════════════════════════════════════════
@@ -139,6 +155,7 @@ export type HandlerFunction = (
 export type BuiltinGuardName =
 	| 'auth'
 	| 'cors'
+	| 'csrf'
 	| 'logger'
 	| 'compress'
 	| 'security'
@@ -188,6 +205,12 @@ export interface AppConfig {
 	trustProxy?: boolean
 	/** Restart server on file changes (dev mode). Default: false */
 	watch?: boolean
+	/** Path to views directory (enables SSR template engine). */
+	views?: string | boolean
+	/** Default layout template name. */
+	layout?: string
+	/** Max compiled templates to cache. Default: 500 */
+	viewsCacheMax?: number
 }
 
 export interface OpenAPIConfig {
@@ -235,6 +258,26 @@ export interface SuperApp {
 
 	/** Register a per-app named guard. */
 	addGuard(name: string, factory: (params?: string) => PipeFunction): this
+
+	/** Register a custom template helper function. */
+	addHelper(name: string, fn: (...args: any[]) => any): this
+
+	/**
+	 * Register a programmatic view route.
+	 *
+	 *   app.render('GET', '/about', 'about')
+	 *   app.render('GET', '/about', 'about', { year: 2025 })
+	 *   app.render('GET', '/users', 'users', async (req, s) => ({ users: await s.userService.all() }))
+	 *   app.render('GET', '/users', 'users', ['auth'], async (req, s) => ({ ... }))
+	 */
+	render(
+		method: string,
+		path: string,
+		template: string,
+		dataOrPipesOrOpts?: Record<string, any> | (BuiltinGuardName | string)[] | ViewDataFunction | RenderRouteOptions,
+		dataFnOrOpts?: ViewDataFunction | RenderRouteOptions,
+		opts?: RenderRouteOptions,
+	): this
 
 	/** Set a custom rate limit store. */
 	setRateLimitStore(store: any): this
@@ -487,3 +530,45 @@ export declare function defineGuard(
 ): void
 
 export declare function dir(importMetaUrl: string, ...paths: string[]): string
+
+// ═══════════════════════════════════════════════
+//  View Engine (SSR Templates)
+// ═══════════════════════════════════════════════
+
+export interface ViewEngineOptions {
+	dir: string
+	layout?: string
+	globals?: Record<string, any>
+	helpers?: Record<string, (...args: any[]) => any>
+	cacheMax?: number
+}
+
+export interface RenderOptions {
+	layout?: string | false
+}
+
+export interface RenderRouteOptions {
+	layout?: string | false
+}
+
+export type ViewDataFunction = (
+	request: RequestContext,
+	services: ServiceMap,
+) => Record<string, any> | Promise<Record<string, any>>
+
+export interface ViewSettings {
+	layout?: string
+	globals?: Record<string, any>
+	helpers?: Record<string, (...args: any[]) => any>
+}
+
+/**
+ * Template engine with [= expr], [# if/each], [> include] syntax.
+ * AOT-compiled to JS functions with LRU cache.
+ */
+export declare class ViewEngine {
+	constructor(options?: ViewEngineOptions)
+	addHelper(name: string, fn: (...args: any[]) => any): void
+	render(name: string, data?: Record<string, any>, options?: RenderOptions): Promise<string>
+	clearCache(): void
+}

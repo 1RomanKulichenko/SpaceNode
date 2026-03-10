@@ -213,6 +213,49 @@ describe('Context — createRequest', () => {
       assert.ok(cookies[0].includes('Secure'))
     })
   })
+
+  describe('flash()', () => {
+    it('should set flash messages in cookie', () => {
+      const req = mockReq()
+      const res = mockRes()
+      const request = createRequest(req, res)
+      request.flash('success', 'Done!')
+
+      const cookies = res._headers['Set-Cookie']
+      assert.ok(Array.isArray(cookies))
+      assert.ok(cookies.some(c => c.includes('_flash=')))
+    })
+
+    it('should accumulate multiple flash messages of same type', () => {
+      const req = mockReq()
+      const res = mockRes()
+      const request = createRequest(req, res)
+      request.flash('error', 'Error 1')
+      request.flash('error', 'Error 2')
+
+      assert.deepStrictEqual(request._flashOut.error, ['Error 1', 'Error 2'])
+    })
+
+    it('should parse incoming flash cookie and clear it', () => {
+      const flashData = { success: ['Logged in!'] }
+      const encoded = Buffer.from(JSON.stringify(flashData)).toString('base64')
+      const req = mockReq({ headers: { cookie: `_flash=${encoded}` } })
+      const res = mockRes()
+      const request = createRequest(req, res)
+
+      assert.deepStrictEqual(request.flashes, { success: ['Logged in!'] })
+      // Should have set a clearing cookie
+      const cookies = res._headers['Set-Cookie']
+      assert.ok(cookies.some(c => c.includes('_flash=') && c.includes('Max-Age=0')))
+    })
+
+    it('should have empty flashes when no flash cookie', () => {
+      const req = mockReq()
+      const res = mockRes()
+      const request = createRequest(req, res)
+      assert.deepStrictEqual(request.flashes, {})
+    })
+  })
 })
 
 describe('Context — parseBody', () => {

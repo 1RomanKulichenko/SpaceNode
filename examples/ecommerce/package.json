@@ -18,6 +18,6 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.3.1",
     "mongoose": "^9.2.4",
-    "spacenode": "^1.0.2"
+    "spacenode": "^1.1.0"
   }
 }
